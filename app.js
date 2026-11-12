@@ -150,9 +150,15 @@
   function input(d) {
     if (!game || paused || game.done || sel < 0 || isGiven(sel)) return;
     if (mode === 'candidate') {
-      if (game.values[sel]) return;
       snapshot();
-      game.notes[sel] ^= (1 << d);
+      if (game.values[sel]) {
+        // candidate over an entry: lift the entry, bring back its notes, add this one
+        game.values[sel] = 0;
+        game.checks[sel] = 0;
+        game.notes[sel] |= (1 << d);
+      } else {
+        game.notes[sel] ^= (1 << d);
+      }
     } else {
       if (game.values[sel] === d) return;
       snapshot();

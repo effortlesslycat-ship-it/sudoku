@@ -1,5 +1,5 @@
 // Offline support: try the network first (so updates arrive), fall back to the cache.
-const CACHE = 'sudoku-v1';
+const CACHE = 'sudoku-v2';
 const FILES = ['./', 'index.html', 'app.js', 'gen.js', 'manifest.webmanifest', 'icon-180.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
