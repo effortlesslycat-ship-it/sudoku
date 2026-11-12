@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Sudoku</title>
+<meta name="theme-color" content="#121212">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sudoku">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<style>
+:root {
+  /* Board colors (NYT-style defaults — change these to re-theme) */
+  --bg: #121212;
+  --text: #f2f2f2;
+  --muted: #9a9a9a;
+  --cell: #121212;
+  --given: #404040;
+  --line: #5c5540;          /* row/column tint */
+  --line-given: #3d3627;    /* given digit inside the tint */
+  --same: #8f632a;          /* your entries matching the selected digit */
+  --same-given: #553b19;    /* givens matching the selected digit */
+  --sel: #eba13c;           /* selected cell */
+  --sel-text: #141414;
+  --thin: #4a4a4a;          /* lines between cells */
+  --thick: #8a8a8a;         /* lines between boxes */
+  --frame: #e6e6e6;         /* outer border */
+  --note: #b4b4b4;
+  --correct: #9db6f2;       /* passed a Check */
+  --correct-on-sel: #1d3f9e;
+  --bad: #e65c5c;           /* conflict dot + wrong slash */
+  --button: #404040;
+  --button-edge: #5e5e5e;
+  --panel: #262626;
+  --accent: #eba13c;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  -webkit-user-select: none; user-select: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+.app {
+  max-width: 540px; margin: 0 auto; min-height: 100%;
+  padding: calc(env(safe-area-inset-top) + 6px) 12px calc(env(safe-area-inset-bottom) + 16px);
+  display: flex; flex-direction: column;
+}
+
+/* Top bar */
+.topbar { display: flex; align-items: center; justify-content: space-between; height: 48px; border-bottom: 1px solid #333; margin: 0 -12px; padding: 0 12px; }
+.iconbtn { background: none; border: 0; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; }
+.iconbtn:active { background: #2a2a2a; }
+.iconbtn svg { width: 24px; height: 24px; }
+.brand { font-family: Georgia, "Times New Roman", serif; font-size: 20px; letter-spacing: .2px; }
+
+.status { display: flex; justify-content: center; align-items: center; gap: 36px; height: 56px; }
+.level { font-family: Georgia, "Times New Roman", serif; font-size: 22px; }
+.timer { display: flex; align-items: center; gap: 8px; font-size: 21px; font-variant-numeric: tabular-nums; background: none; border: 0; padding: 6px 4px; }
+.timer .pausebars { display: inline-flex; gap: 3px; }
+.timer .pausebars i { width: 4px; height: 15px; background: currentColor; display: block; border-radius: 1px; }
+.timer.hidden-time .t { visibility: hidden; }
+
+/* Board */
+.boardwrap { position: relative; width: 100%; }
+.board {
+  width: 100%; aspect-ratio: 1; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+  gap: 3px; background: var(--thick); border: 3px solid var(--frame);
+}
+.box { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 1px; background: var(--thin); }
+.cell { position: relative; background: var(--cell); display: grid; place-items: center; overflow: hidden; }
+.cell.given { background: var(--given); }
+.cell.line { background: var(--line); }
+.cell.line.given { background: var(--line-given); }
+.cell.same { background: var(--same); }
+.cell.same.given { background: var(--same-given); }
+.cell.sel { background: var(--sel); color: var(--sel-text); }
+.digit { font-weight: 700; font-size: min(8.4vw, 44px); line-height: 1; }
+.digit.correct { color: var(--correct); }
+.cell.sel .digit.correct { color: var(--correct-on-sel); }
+.notes { position: absolute; inset: 2px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); }
+.notes span { display: grid; place-items: center; font-size: min(2.9vw, 14px); color: var(--note); line-height: 1; }
+.cell.sel .notes span { color: #3a2a10; }
+.cell.wrong::after {
+  content: ""; position: absolute; left: -10%; right: -10%; top: 50%; height: 2.5px; background: var(--bad);
+  transform: rotate(-45deg);
+}
+.cell.conflict::before {
+  content: ""; position: absolute; right: 9%; bottom: 9%; width: 18%; height: 18%; border-radius: 50%; background: var(--bad); z-index: 1;
+}
+
+.paused {
+  position: absolute; inset: 0; background: var(--bg); border: 3px solid var(--frame);
+  display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+}
+.paused.show { display: flex; }
+.paused p { margin: 0; font-family: Georgia, serif; font-size: 26px; }
+
+/* Controls */
+.controls { margin-top: 24px; padding: 0 4%; }
+.row1 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.modes { display: flex; border: 1px solid #555; border-radius: 4px; overflow: hidden; }
+.modes button { background: none; border: 0; padding: 11px 0; width: min(25vw, 130px); font-size: 17px; color: var(--muted); }
+.modes button.on { background: #f5f5f5; color: #141414; }
+.undo { background: var(--button); border: 1.5px solid var(--button-edge); border-radius: 4px; padding: 10px 18px; font-size: 17px; font-weight: 700; }
+.undo:disabled { opacity: .45; }
+.pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.pad button {
+  background: var(--button); border: 1.5px solid var(--button-edge); border-radius: 4px;
+  height: min(13vw, 64px); font-size: min(7.6vw, 34px); font-weight: 700;
+}
+.pad button:active, .undo:active { filter: brightness(1.3); }
+.pad.small button[data-d] { font-size: min(4.6vw, 22px); font-weight: 600; }
+.pad button.used { color: #8a8a8a; font-weight: 400; }
+.pad svg { width: 28px; height: 28px; vertical-align: middle; }
+
+/* Menu */
+.menu {
+  position: absolute; top: calc(env(safe-area-inset-top) + 54px); right: max(12px, calc(50% - 258px));
+  background: #1a1a1a; border: 1px solid #444; min-width: 210px; z-index: 20; display: none;
+}
+.menu.show { display: block; }
+.menu button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 15px 20px; font-size: 18px; }
+.menu button:active { background: #2c2c2c; }
+.menu hr { border: 0; border-top: 1px solid #444; margin: 0; }
+.scrim { position: fixed; inset: 0; z-index: 10; display: none; }
+.scrim.show { display: block; }
+
+/* Sheets (stats, win) */
+.sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 30; display: none; align-items: flex-end; justify-content: center; }
+.sheet-bg.show { display: flex; }
+.sheet {
+  background: var(--panel); width: 100%; max-width: 540px; max-height: 92vh; overflow: auto;
+  border-radius: 14px 14px 0 0; padding: 22px 22px calc(env(safe-area-inset-bottom) + 24px);
+  -webkit-user-select: text; user-select: text;
+}
+.sheet h2 { font-family: Georgia, serif; font-size: 28px; margin: 4px 0 16px; font-weight: 700; }
+.sheet .close { float: right; margin: -8px -10px 0 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.stat { background: #1c1c1c; border-radius: 8px; padding: 12px 14px; }
+.stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 13px; color: var(--muted); }
+.stat em { font-style: normal; font-size: 13px; margin-left: 6px; }
+.good { color: #8fd18f; } .meh { color: #e8a0a0; }
+.chartbox { background: #1c1c1c; border-radius: 8px; padding: 10px 6px 4px; margin-bottom: 10px; }
+.chartbox svg { width: 100%; height: auto; display: block; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); padding: 2px 10px 6px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.toggle { display: flex; align-items: center; gap: 10px; font-size: 15px; margin: 6px 0 18px; }
+.toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+.btnrow { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn { background: var(--button); border: 1.5px solid var(--button-edge); border-radius: 6px; padding: 11px 16px; font-size: 16px; }
+.btn.primary { background: #f5f5f5; color: #141414; border-color: #f5f5f5; font-weight: 700; }
+.fine { font-size: 13px; color: var(--muted); margin-top: 14px; line-height: 1.4; }
+.win-time { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 0; }
+.win-sub { color: var(--muted); margin: 6px 0 4px; font-size: 16px; }
+.win-quip { font-family: Georgia, serif; font-style: italic; font-size: 17px; margin: 14px 0 22px; }
+.tag { display: inline-block; font-size: 12px; border: 1px solid #666; border-radius: 99px; padding: 2px 9px; color: var(--muted); margin-left: 8px; vertical-align: 6px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 28px); transform: translateX(-50%);
+  background: #f5f5f5; color: #141414; padding: 12px 18px; border-radius: 8px; font-size: 15px; z-index: 40;
+  opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90vw; text-align: center;
+}
+.toast.show { opacity: 1; }
+.loading { position: absolute; inset: 0; display: none; place-items: center; background: rgba(18,18,18,.85); font-family: Georgia, serif; font-size: 20px; }
+.loading.show { display: grid; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <button class="iconbtn" id="statsBtn" aria-label="Stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+    </button>
+    <div class="brand">Sudoku</div>
+    <button class="iconbtn" id="menuBtn" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+    </button>
+  </div>
+
+  <div class="status">
+    <div class="level">Hard</div>
+    <button class="timer" id="timer" aria-label="Pause"><span class="t" id="time">0:00</span><span class="pausebars"><i></i><i></i></span></button>
+  </div>
+
+  <div class="boardwrap">
+    <div class="board" id="board"></div>
+    <div class="paused" id="paused"><p>Paused</p><button class="btn primary" id="resumeBtn">Resume</button></div>
+    <div class="loading" id="loading">Making a puzzle…</div>
+  </div>
+
+  <div class="controls">
+    <div class="row1">
+      <div class="modes">
+        <button id="modeNormal" class="on">Normal</button>
+        <button id="modeCand">Candidate</button>
+      </div>
+      <button class="undo" id="undoBtn" disabled>Undo</button>
+    </div>
+    <div class="pad" id="pad">
+      <button data-d="1">1</button><button data-d="2">2</button><button data-d="3">3</button><button data-d="4">4</button><button data-d="5">5</button>
+      <button data-d="6">6</button><button data-d="7">7</button><button data-d="8">8</button><button data-d="9">9</button>
+      <button id="eraseBtn" aria-label="Erase"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="menu" id="menu">
+  <button data-act="checkCell">Check Cell</button>
+  <button data-act="checkPuzzle">Check Puzzle</button>
+  <hr>
+  <button data-act="reset">Reset Puzzle</button>
+  <button data-act="newPuzzle">New Puzzle</button>
+</div>
+
+<div class="sheet-bg" id="statsSheet">
+  <div class="sheet">
+    <button class="iconbtn close" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <h2>Stats</h2>
+    <label class="toggle"><input type="checkbox" id="unassistedOnly"> Unassisted solves only</label>
+    <div id="statsBody"></div>
+    <div class="btnrow">
+      <button class="btn" id="exportBtn">Export stats</button>
+      <button class="btn" id="importBtn">Import stats</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+    <p class="fine">Stats live on this phone only. Export now and then so a cleared Safari doesn't take them with it.</p>
+  </div>
+</div>
+
+<div class="sheet-bg" id="winSheet">
+  <div class="sheet" id="winBody"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="gen.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
